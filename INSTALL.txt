@@ -1,0 +1,26 @@
+AKASH PORTFOLIO - PHOTO UPGRADE PACK
+====================================
+Unzip this INTO your project folder (e.g. E:\akash-portfolio) and choose "Replace" if asked.
+
+WHAT IS INSIDE
+  index.html                      Standalone page WITH the photo (static build)
+  templates_index_reference.html  Same page with /static/ paths - copy the 4 edits into templates/index.html
+  static/images/akash.jpg         Big photo (About section)
+  static/images/akash-sm.jpg      Small face crop (hero avatar)
+  static/css/photo.css            New styles (ring, glow, chips, avatar)
+  static/js/photo.js              3D tilt effect
+  app.py, build_static.py, requirements.txt   Your original backend files (unchanged)
+  .env.example                    Renamed from _env.example
+  .gitignore                      Keeps .env and messages.db out of GitHub
+
+4 EDITS FOR templates/index.html (Flask version)
+  1. <head>: add  <link rel="stylesheet" href="/static/css/photo.css">  after style.css
+  2. Hero: replace <div class="hi">HELLO, I'M</div> with the avatar version from the reference file
+  3. About: wrap the existing <div class="about"> in <div class="me-wrap"> ... </div>
+     and put the "me-col" photo block (from the reference file) before it
+  4. Bottom: add  <script src="/static/js/photo.js"></script>  after world.js
+
+NOT INCLUDED: style.css, main.js, world.js, data.js, templates/index.html (keep your own copies).
+messages.db is left out on purpose (it holds a test message and personal data).
+
+RUN:  venv\Scripts\activate  ->  python app.py  ->  http://127.0.0.1:5000
