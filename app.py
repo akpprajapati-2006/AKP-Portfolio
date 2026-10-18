@@ -1,14 +1,14 @@
-"""Akash Kumar Prajapati - Portfolio backend (Flask + SQLite).
+"""Akash Kumar Prajapati - Portfolio backend (Flask + Supabase PostgreSQL REST API).
 Run:  python app.py   ->  http://127.0.0.1:5000
 """
-import os, re, sqlite3, smtplib, time
+import os, re, smtplib, time
+import requests
 from collections import defaultdict
 from email.message import EmailMessage
 from pathlib import Path
 from flask import Flask, jsonify, render_template, request, send_from_directory
 
 BASE = Path(__file__).resolve().parent
-DB_PATH = BASE / "messages.db"
 
 # ---- tiny .env loader (no extra package needed) ----
 env_file = BASE / ".env"
@@ -16,7 +16,13 @@ if env_file.exists():
     for line in env_file.read_text(encoding="utf-8").splitlines():
         if "=" in line and not line.strip().startswith("#"):
             k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+# Safe configuration: URL may have a project-specific default; secret key must come from env.
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://fxdgvrtpjuadswmyhpzw.supabase.co").rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+SUPABASE_BUCKET = os.environ.get("SUPABASE_BUCKET", "user-files")
+SUPABASE_TIMEOUT = 12
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
@@ -64,93 +70,27 @@ SKILLS = {
                         ["Unity", "Un", "#e2e8f0", "3D game development"], ["Data Analytics", "DA", "#fb7185", "Exploring"]],
 }
 
-# ---- database ----
-def db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+# ---- Supabase database (PostgreSQL via REST API) ----
+def supabase_headers(prefer=None):
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise RuntimeError("Supabase is not configured. Set SUPABASE_URL and SUPABASE_KEY.")
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+    if prefer:
+        headers["Prefer"] = prefer
+    return headers
 
-def init_db():
-    with db() as c:
-        c.execute("""CREATE TABLE IF NOT EXISTS messages(
-            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, message TEXT,
-            ip TEXT, created TEXT DEFAULT CURRENT_TIMESTAMP)""")
 
-# ---- very small rate limiter: 5 messages / 10 min / IP ----
-_hits = defaultdict(list)
-def limited(ip):
-    now = time.time()
-    _hits[ip] = [t for t in _hits[ip] if now - t < 600]
-    if len(_hits[ip]) >= 5:
-        return True
-    _hits[ip].append(now)
-    return False
-
-def send_mail(name, email, message):
-    host, user, pwd, to = (os.environ.get(k) for k in ("SMTP_HOST", "SMTP_USER", "SMTP_PASS", "MAIL_TO"))
-    if not (host and user and pwd and to):
-        return False
-    msg = EmailMessage()
-    msg["Subject"] = f"Portfolio message from {name}"
-    msg["From"], msg["To"], msg["Reply-To"] = user, to, email
-    msg.set_content(f"From: {name} <{email}>\n\n{message}")
-    with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", 587)), timeout=10) as s:
-        s.starttls(); s.login(user, pwd); s.send_message(msg)
-    return True
-
-# ---- routes ----
-@app.get("/")
-def index():
-    # Serve the finished index.html from the project root (the same file you open with Live Server).
-    # If it is missing, fall back to the old Flask template so the site never shows an error page.
-    if (BASE / "index.html").exists():
-        return send_from_directory(BASE, "index.html")
-    has_resume = (BASE / "static" / "files" / "resume.pdf").exists()
-    return render_template("index.html", p=PROFILE, has_resume=has_resume)
-
-@app.get("/resume")
-def resume():
-    return send_from_directory(BASE / "static" / "files", "resume.pdf", as_attachment=True,
-                               download_name="Akash_Kumar_Prajapati_Resume.pdf")
-
-@app.get("/api/projects")
-def api_projects():
-    items = []
-    for p in PROJECTS:  # use real screenshot only if the file exists
-        q = dict(p)
-        if q["image"] and not (BASE / "static" / "images" / q["image"]).exists():
-            q["image"] = ""
-        items.append(q)
-    return jsonify(items)
-
-@app.get("/api/skills")
-def api_skills():
-    return jsonify(SKILLS)
-
-@app.post("/api/contact")
-def api_contact():
-    data = request.get_json(silent=True) or {}
-    name = str(data.get("name", "")).strip()
-    email = str(data.get("email", "")).strip()
-    message = str(data.get("message", "")).strip()
-    errors = {}
-    if not 2 <= len(name) <= 80: errors["name"] = "Please enter your name (2-80 characters)."
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email) or len(email) > 120: errors["email"] = "Enter a valid email."
-    if not 10 <= len(message) <= 2000: errors["message"] = "Message must be 10-2000 characters."
-    if errors:
-        return jsonify(ok=False, errors=errors), 400
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "?").split(",")[0].strip()
-    if limited(ip):
-        return jsonify(ok=False, error="Too many messages. Please try again later."), 429
-    with db() as c:
-        c.execute("INSERT INTO messages(name,email,message,ip) VALUES(?,?,?,?)", (name, email, message, ip))
-    mailed = False
-    try:
-        mailed = send_mail(name, email, message)
-    except Exception as exc:  # message is already saved, so do not fail the user
-        app.logger.warning("Email failed: %s", exc)
-    return jsonify(ok=True, emailed=mailed)
-
-init_db()
-if __name__ == "__main__":
-    app.run(debug=True, port=int(os.environ.get("PORT", 5000)))
+def save_contact_message(name, email, message, ip):
+    """Insert a contact-form message into the Supabase public.messages table."""
+    url = f"{SUPABASE_URL}/rest/v1/messages"
+    payload = {"name": name, "email": email, "message": message, "ip": ip}
+    response = requests.post(
+        url,
+        headers=supabase_headers("return=minimal"),
+        json=payload,
+        timeout=SUPABASE_TIMEOUT,
+    )
