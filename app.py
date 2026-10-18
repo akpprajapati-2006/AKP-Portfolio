@@ -1,96 +1,355 @@
-"""Akash Kumar Prajapati - Portfolio backend (Flask + Supabase PostgreSQL REST API).
-Run:  python app.py   ->  http://127.0.0.1:5000
-"""
-import os, re, smtplib, time
-import requests
+
+import os
+import re
+import time
+import logging
 from collections import defaultdict
-from email.message import EmailMessage
-from pathlib import Path
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from threading import Lock
 
-BASE = Path(__file__).resolve().parent
+import requests
+from flask import (
+    Flask,
+    jsonify,
+    request,
+    render_template,
+    send_from_directory,
+)
 
-# ---- tiny .env loader (no extra package needed) ----
-env_file = BASE / ".env"
-if env_file.exists():
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        if "=" in line and not line.strip().startswith("#"):
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+app = Flask(__name__)
 
-# Safe configuration: URL may have a project-specific default; secret key must come from env.
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://fxdgvrtpjuadswmyhpzw.supabase.co").rstrip("/")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4ZGd2cnRwanVhZHN3bXlocHp3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjMwMzQ2OCwiZXhwIjoyMTA3ODc5NDY4fQ.84iG8zbGy85Dulu95o6Puxe3kp5gYxryLNA_dukN6PY")
+# --------------------------------------------------
+# Configuration
+# --------------------------------------------------
+
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+SUPABASE_URL = os.environ.get(
+    "SUPABASE_URL",
+    "https://fxdgvrtpjuadswmyhpzw.supabase.co",
+).rstrip("/")
+
+# Set this in Render Environment Variables.
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "").strip()
+
 SUPABASE_BUCKET = os.environ.get("SUPABASE_BUCKET", "user-files")
 SUPABASE_TIMEOUT = 12
 
-app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# ---- EDIT YOUR REAL DETAILS HERE ----
+# --------------------------------------------------
+# Portfolio data
+# Keep your existing data here if you already have it.
+# --------------------------------------------------
+
 PROFILE = {
     "name": "Akash Kumar Prajapati",
-    "short": "AKASH",
-    "degree": "B.Tech CSE",
-    "college": "RIMT University",
-    "location": "Mandi Gobindgarh, Punjab",
-    "tagline": "Building digital solutions, exploring cloud, AI and cybersecurity, and creating projects that make an impact.",
-    "email": "akashprajapati2006@gmail.com",           # verify
-    "github": "https://github.com/akpprajapati-2006",  # verify
-    "linkedin": "https://www.linkedin.com/in/akash-kumar-prajapati-58a76a371/",  # verify
-    "roles": ["CSE Student", "Cloud Explorer", "Cybersecurity Learner", "Unity Game Developer"],
-}
-PROJECTS = [
-    {"id": 1, "title": "AKP CloudVault", "subtitle": "Personal Cloud Storage",
-     "desc": "A personal cloud storage web app to upload, store and manage files securely.",
-     "tags": ["Flask", "Supabase", "PostgreSQL"], "cats": ["web", "cloud"], "icon": "☁️",
-     "grad": ["#1d4ed8", "#22d3ee"], "image": "", "link": ""},
-    {"id": 2, "title": "Payroll Management System", "subtitle": "Employee & Salary Management",
-     "desc": "Manage employees and salary records with a relational database backend.",
-     "tags": ["Flask", "MySQL", "AWS"], "cats": ["web", "cloud"], "icon": "📊",
-     "grad": ["#4338ca", "#38bdf8"], "image": "", "link": ""},
-    {"id": 3, "title": "SIH Cybersecurity Project", "subtitle": "AI-Driven Network Security Compliance Auditor",
-     "desc": "Network security auditing project that checks compliance using AI-based analysis.",
-     "tags": ["AI", "Cybersecurity", "Python"], "cats": ["security"], "icon": "🛡️",
-     "grad": ["#0e7490", "#6366f1"], "image": "", "link": ""},
-    {"id": 4, "title": "Unity 3D Car Racing Game", "subtitle": "3D Racing Game",
-     "desc": "A 3D racing game with WheelCollider car physics, drifting and engine sound.",
-     "tags": ["Unity", "C#", "3D Models"], "cats": ["game"], "icon": "🏎️",
-     "grad": ["#7c3aed", "#22d3ee"], "image": "", "link": ""},
-]
-SKILLS = {
-    "Programming": [["Python", "Py", "#3b82f6", "Scripting and Flask apps"], ["Java", "Jv", "#ef4444", "Core OOP concepts"],
-                    ["C++", "C+", "#38bdf8", "DSA and fundamentals"], ["HTML", "H5", "#f97316", "Page structure"],
-                    ["CSS", "C3", "#3b82f6", "Layouts, animation, UI"], ["JavaScript", "JS", "#facc15", "Web interactivity"]],
-    "Backend & Database": [["Flask", "Fl", "#94a3b8", "Python web framework"], ["MySQL", "My", "#0ea5e9", "Relational database"],
-                           ["PostgreSQL", "Pg", "#6366f1", "Relational database"], ["Supabase", "Sb", "#22c55e", "Backend as a service"]],
-    "Cloud & DevOps": [["AWS", "AW", "#f59e0b", "Learning cloud services"], ["Git/GitHub", "Gt", "#f43f5e", "Version control"],
-                       ["Docker", "Dk", "#38bdf8", "Currently learning"]],
-    "Other Interests": [["AI/ML", "AI", "#a78bfa", "Exploring"], ["Cybersecurity", "Cy", "#22d3ee", "Network security"],
-                        ["Unity", "Un", "#e2e8f0", "3D game development"], ["Data Analytics", "DA", "#fb7185", "Exploring"]],
+    "title": "Computer Science Engineering Student",
+    "bio": "Interested in Python, cloud computing, web development and AI.",
 }
 
-# ---- Supabase database (PostgreSQL via REST API) ----
+PROJECTS = [
+    {
+        "title": "AKP CloudVault",
+        "description": "A personal cloud application for managing files.",
+        "technologies": ["Python", "Flask", "Supabase"],
+    },
+    {
+        "title": "Payroll Management System",
+        "description": "A web application for payroll management.",
+        "technologies": ["Python", "Flask", "SQL"],
+    },
+    {
+        "title": "AI Network Security Auditor",
+        "description": "A project concept for checking network security compliance.",
+        "technologies": ["Python", "AI", "Cybersecurity"],
+    },
+    {
+        "title": "Unity Car Racing Game",
+        "description": "A 3D car simulation game built with Unity.",
+        "technologies": ["Unity", "C#", "3D"],
+    },
+]
+
+SKILLS = [
+    {"name": "Python", "level": "Beginner"},
+    {"name": "Java", "level": "Beginner"},
+    {"name": "HTML", "level": "Learning"},
+    {"name": "CSS", "level": "Learning"},
+    {"name": "JavaScript", "level": "Learning"},
+    {"name": "Cloud Computing", "level": "Learning"},
+]
+
+# --------------------------------------------------
+# Supabase REST API
+# --------------------------------------------------
+
 def supabase_headers(prefer=None):
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        raise RuntimeError("Supabase is not configured. Set SUPABASE_URL and SUPABASE_KEY.")
+    if not SUPABASE_KEY:
+        raise RuntimeError("SUPABASE_KEY is not configured.")
+
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
     }
+
     if prefer:
         headers["Prefer"] = prefer
+
     return headers
 
 
-def save_contact_message(name, email, message, ip):
-    """Insert a contact-form message into the Supabase public.messages table."""
+def save_contact_message(name, email, message, ip=None):
+    """Save a contact form message to public.messages."""
+
     url = f"{SUPABASE_URL}/rest/v1/messages"
-    payload = {"name": name, "email": email, "message": message, "ip": ip}
+
+    payload = {
+        "name": name,
+        "email": email,
+        "message": message,
+        "ip": ip,
+    }
+
     response = requests.post(
         url,
         headers=supabase_headers("return=minimal"),
         json=payload,
         timeout=SUPABASE_TIMEOUT,
     )
+
+    response.raise_for_status()
+    return True
+
+
+# --------------------------------------------------
+# Basic in-memory rate limiter
+# Note: counters reset when the service restarts.
+# --------------------------------------------------
+
+_rate_lock = Lock()
+_rate_requests = defaultdict(list)
+
+
+def rate_limited(ip, limit=10, window=60):
+    now = time.time()
+
+    with _rate_lock:
+        recent = [
+            timestamp
+            for timestamp in _rate_requests[ip]
+            if now - timestamp < window
+        ]
+
+        _rate_requests[ip] = recent
+
+        if len(recent) >= limit:
+            return True
+
+        _rate_requests[ip].append(now)
+        return False
+
+
+# --------------------------------------------------
+# Routes
+# --------------------------------------------------
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({
+        "status": "ok",
+        "service": "akp-portfolio-api",
+    }), 200
+
+
+@app.route("/", methods=["GET"])
+def home():
+    index_path = os.path.join(BASE_DIR, "index.html")
+
+    if os.path.isfile(index_path):
+        return send_from_directory(BASE_DIR, "index.html")
+
+    template_path = os.path.join(BASE_DIR, "templates", "index.html")
+
+    if os.path.isfile(template_path):
+        return render_template(
+            "index.html",
+            profile=PROFILE,
+            projects=PROJECTS,
+            skills=SKILLS,
+        )
+
+    return jsonify({
+        "message": "AKP Portfolio API is running.",
+        "health": "/health",
+        "projects": "/api/projects",
+        "skills": "/api/skills",
+    }), 200
+
+
+@app.route("/resume", methods=["GET"])
+def resume():
+    # Put your resume PDF in a "static" directory.
+    filename = os.environ.get("RESUME_FILENAME", "resume.pdf")
+    static_dir = os.path.join(BASE_DIR, "static")
+    resume_path = os.path.join(static_dir, filename)
+
+    if os.path.isfile(resume_path):
+        return send_from_directory(
+            static_dir,
+            filename,
+            as_attachment=True,
+        )
+
+    return jsonify({
+        "error": "Resume file not found.",
+        "hint": "Place your PDF in the static folder or configure RESUME_FILENAME.",
+    }), 404
+
+
+@app.route("/api/projects", methods=["GET"])
+def get_projects():
+    return jsonify({
+        "success": True,
+        "count": len(PROJECTS),
+        "projects": PROJECTS,
+    }), 200
+
+
+@app.route("/api/skills", methods=["GET"])
+def get_skills():
+    return jsonify({
+        "success": True,
+        "count": len(SKILLS),
+        "skills": SKILLS,
+    }), 200
+
+
+@app.route("/api/contact", methods=["POST"])
+def contact():
+    ip = request.remote_addr or "unknown"
+
+    if rate_limited(ip):
+        return jsonify({
+            "success": False,
+            "error": "Too many requests. Please try again later.",
+        }), 429
+
+    if not request.is_json:
+        return jsonify({
+            "success": False,
+            "error": "Send the request as JSON.",
+        }), 415
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "success": False,
+            "error": "Invalid JSON body.",
+        }), 400
+
+    name = str(data.get("name", "")).strip()
+    email = str(data.get("email", "")).strip()
+    message = str(data.get("message", "")).strip()
+
+    if not name or not email or not message:
+        return jsonify({
+            "success": False,
+            "error": "Name, email and message are required.",
+        }), 400
+
+    if len(name) > 100 or len(email) > 254 or len(message) > 5000:
+        return jsonify({
+            "success": False,
+            "error": "One or more fields exceed the allowed length.",
+        }), 400
+
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        return jsonify({
+            "success": False,
+            "error": "Please enter a valid email address.",
+        }), 400
+
+    try:
+        save_contact_message(name, email, message, ip)
+
+        return jsonify({
+            "success": True,
+            "message": "Your message was submitted successfully.",
+        }), 201
+
+    except requests.exceptions.Timeout:
+        logger.warning("Supabase request timed out.")
+        return jsonify({
+            "success": False,
+            "error": "Database request timed out. Please try again.",
+        }), 504
+
+    except requests.exceptions.HTTPError as exc:
+        status_code = (
+            exc.response.status_code
+            if exc.response is not None
+            else 502
+        )
+
+        # Keep provider details and secrets out of public responses.
+        logger.error("Supabase returned HTTP status %s.", status_code)
+
+        return jsonify({
+            "success": False,
+            "error": "Could not save your message. Please try again later.",
+        }), 502
+
+    except requests.exceptions.RequestException:
+        logger.exception("Supabase connection failed.")
+        return jsonify({
+            "success": False,
+            "error": "Could not connect to the database.",
+        }), 502
+
+    except RuntimeError:
+        logger.exception("Supabase configuration is missing.")
+        return jsonify({
+            "success": False,
+            "error": "Server database configuration is incomplete.",
+        }), 500
+
+    except Exception:
+        logger.exception("Unexpected contact endpoint error.")
+        return jsonify({
+            "success": False,
+            "error": "An unexpected server error occurred.",
+        }), 500
+
+
+@app.errorhandler(404)
+def not_found(_error):
+    return jsonify({
+        "success": False,
+        "error": "Route not found.",
+    }), 404
+
+
+@app.errorhandler(413)
+def request_too_large(_error):
+    return jsonify({
+        "success": False,
+        "error": "Request body is too large.",
+    }), 413
+
+
+@app.errorhandler(500)
+def internal_error(_error):
+    return jsonify({
+        "success": False,
+        "error": "Internal server error.",
+    }), 500
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=False)
