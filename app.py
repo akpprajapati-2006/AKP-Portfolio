@@ -32,7 +32,7 @@ SUPABASE_URL = os.environ.get(
 ).rstrip("/")
 
 # Set this in Render Environment Variables.
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "").strip()
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4ZGd2cnRwanVhZHN3bXlocHp3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjMwMzQ2OCwiZXhwIjoyMTA3ODc5NDY4fQ.84iG8zbGy85Dulu95o6Puxe3kp5gYxryLNA_dukN6PY").strip()
 
 SUPABASE_BUCKET = os.environ.get("SUPABASE_BUCKET", "user-files")
 SUPABASE_TIMEOUT = 12
