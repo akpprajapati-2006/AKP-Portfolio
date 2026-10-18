@@ -108,11 +108,25 @@ function counter(el, to) {
 }
 
 /* Load data from the Flask API */
+/* Loads /api/skills or /api/projects. If the server is missing, errors out, or sends data in an
+   unexpected shape, it falls back to the copy saved in data.js, so the page never shows empty boxes. */
 async function getJSON(url) {
-  const fb = window.FALLBACK && window.FALLBACK[url.split("/").pop()];
-  if (location.protocol === "file:" && fb) return fb; /* double-clicked index.html: no server */
-  try { const r = await fetch(url); if (!r.ok) throw new Error(r.status); return await r.json(); }
-  catch (e) { const f = window.FALLBACK && window.FALLBACK[url.split("/").pop()]; if (f) return f; throw e; } /* works without Flask too */
+  const key = url.split("/").pop();
+  const fb = window.FALLBACK && window.FALLBACK[key];
+  const valid = d => key === "skills"
+    ? !!d && typeof d === "object" && !Array.isArray(d) && Object.values(d).every(g => Array.isArray(g) && g.every(i => Array.isArray(i) && i.length >= 3))
+    : Array.isArray(d) && d.length > 0 && d.every(p => p && Array.isArray(p.tags) && Array.isArray(p.cats) && Array.isArray(p.grad));
+  if (location.protocol === "file:" && fb) return fb;          /* opened by double-click: no server */
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    if (valid(d)) return d;
+    throw new Error("unexpected data shape from " + url);
+  } catch (e) {
+    if (fb) { console.warn("Using saved data for", key, "-", e.message); return fb; }
+    throw e;
+  }
 }
 
 async function loadSkills() {
