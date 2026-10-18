@@ -133,3 +133,62 @@ footer{text-align:center;color:var(--mute);font-size:.85rem;padding:32px 20px;bo
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}.rv{opacity:1;transform:none}}
 .fix .rv{opacity:1!important;transform:none!important}
 .fix #loader{display:none}
+
+/* =====================================================================
+   photo.css  -  hero mini avatar + About portrait + floating chips
+   Load it AFTER style.css.  Floating chips use class "fchip" (NOT "chip"),
+   because "chip" is already used by the project-card tags in style.css.
+   ===================================================================== */
+@property --ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes ringspin { to { --ang: 360deg; } }
+@keyframes floaty   { 50% { transform: translateY(-8px); } }
+
+/* ---------- hero: small round avatar next to "HELLO, I'M" ---------- */
+.hi { display: flex; align-items: center; gap: 14px; }
+.av-wrap { flex: none; display: inline-block; width: 52px; height: 52px; padding: 2px; border-radius: 50%;
+  background: conic-gradient(from var(--ang), #22d3ee, #2f7bff, #8b5cf6, #22d3ee); animation: ringspin 6s linear infinite; }
+.mini-av { display: block; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: 50% 20%; border: 2px solid var(--bg); }
+
+/* ---------- About: portrait on the left, cards on the right ---------- */
+.me-wrap { display: grid; grid-template-columns: minmax(300px, .95fr) 1.25fr; gap: 44px; align-items: center; margin-top: 34px; }
+.me-wrap .about { grid-template-columns: 1fr; }            /* stack the two cards */
+.me-col { display: flex; justify-content: center; padding: 34px 44px 42px; }   /* room for chips outside the photo */
+.me-tilt { position: relative; width: min(100%, 380px); aspect-ratio: 3 / 4; transition: transform .2s ease-out; will-change: transform; }
+.me-ring { position: absolute; inset: -4px; z-index: 0; border-radius: 26px;
+  background: conic-gradient(from var(--ang), #22d3ee, #2f7bff, #8b5cf6, #22d3ee); animation: ringspin 6s linear infinite;
+  box-shadow: 0 0 60px #2f7bff55, 0 30px 80px #000c; }
+.me-frame { position: absolute; inset: 0; z-index: 1; margin: 0; overflow: hidden; border-radius: 22px; background: #0d1626; }
+.me-frame img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; filter: saturate(1.06) contrast(1.04); }
+.me-frame::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 55%, rgba(7,11,20,.92)), linear-gradient(135deg, rgba(47,123,255,.16), transparent 50%); }
+.me-cap { position: absolute; left: 18px; right: 18px; bottom: 16px; z-index: 2; display: grid; line-height: 1.4; }
+.me-cap b { font-size: 1.05rem; color: #fff; }
+.me-cap span { font: 600 .78rem ui-monospace, Consolas, monospace; color: #7dd3fc; }
+.me-br { position: absolute; z-index: 2; width: 34px; height: 34px; border: 2px solid var(--cyan); opacity: .85; pointer-events: none; }
+.me-br.tl { top: -14px; left: -14px; border-right: 0; border-bottom: 0; border-radius: 12px 0 0 0; }
+.me-br.br { bottom: -14px; right: -14px; border-left: 0; border-top: 0; border-radius: 0 0 12px 0; }
+
+/* ---------- floating skill chips (positions are relative to .me-tilt) ---------- */
+.fchip { position: absolute; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px;
+  background: rgba(13,22,38,.82); border: 1px solid rgba(34,211,238,.35); backdrop-filter: blur(12px);
+  color: #fff; font: 600 14px/1 system-ui, "Segoe UI", sans-serif; white-space: nowrap;
+  box-shadow: 0 12px 30px rgba(0,0,0,.45); animation: floaty 6s ease-in-out infinite; }
+.fchip i { font-style: normal; }
+.fc1 { top: -20px;  right: -40px; }
+.fc2 { top: 38%;    left: -110px;  animation-delay: -1.5s; }
+.fc3 { top: 60%;    right: -44px; animation-delay: -3s; }
+.fc4 { bottom: -30px; left: 10%;  animation-delay: -4.5s; }   /* below the photo, never covers the name */
+
+/* ---------- project-card tags: protected from any other .chip rule ---------- */
+.card .chip { position: static; display: inline-block; padding: 3px 11px; margin: 0 4px 6px 0; border-radius: 999px;
+  border: 1px solid var(--line); background: #0b1a3d; color: #9be7ff; font: 400 .74rem/1.5 inherit; font-family: inherit;
+  white-space: nowrap; box-shadow: none; backdrop-filter: none; animation: none; transform: none; }
+
+@media (max-width: 860px) {
+  .me-wrap { grid-template-columns: 1fr; gap: 28px; }
+  .me-col { padding: 30px 44px 40px; }
+  .me-tilt { width: min(100%, 320px); }
+  .fc1 { right: -26px; } .fc2 { left: -34px; } .fc3 { right: -30px; }
+  .fchip { font-size: 13px; padding: 8px 13px; }
+}
+@media (prefers-reduced-motion: reduce) { .fchip, .av-wrap, .me-ring { animation: none; } }
