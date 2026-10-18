@@ -31,7 +31,7 @@ PROFILE = {
     "tagline": "Building digital solutions, exploring cloud, AI and cybersecurity, and creating projects that make an impact.",
     "email": "akashprajapati2006@gmail.com",           # verify
     "github": "https://github.com/akpprajapati-2006",  # verify
-    "linkedin": "https://linkedin.com/in/akash-prajapati",  # verify
+    "linkedin": "https://www.linkedin.com/in/akash-kumar-prajapati-58a76a371/",  # verify
     "roles": ["CSE Student", "Cloud Explorer", "Cybersecurity Learner", "Unity Game Developer"],
 }
 PROJECTS = [
@@ -101,6 +101,10 @@ def send_mail(name, email, message):
 # ---- routes ----
 @app.get("/")
 def index():
+    # Serve the finished index.html from the project root (the same file you open with Live Server).
+    # If it is missing, fall back to the old Flask template so the site never shows an error page.
+    if (BASE / "index.html").exists():
+        return send_from_directory(BASE, "index.html")
     has_resume = (BASE / "static" / "files" / "resume.pdf").exists()
     return render_template("index.html", p=PROFILE, has_resume=has_resume)
 
